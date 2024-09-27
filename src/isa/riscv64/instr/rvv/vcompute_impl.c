@@ -91,6 +91,30 @@ typedef __int128_t int128_t;
         vd = res >> 1; \
     })
 
+uint32_t vf_allowed_e16[] = {
+  FWCVT_FXU,      // vfwcvt_fxuv
+  FWCVT_FX,       // vfwcvt_fxv
+  FNCVT_XUF,      // vfncvt_xufw
+  FNCVT_XF,       // vfncvt_xfw
+  FNCVT_RTZ_XUF,  // vfncvt_rtz_xufw
+  FNCVT_RTZ_XF,   // vfncvt_rtz_xfw
+
+#ifdef CONFIG_RV_ZVFH_MIN
+  FWCVT_FF,       // vfwcvt_ffv
+  FNCVT_FF,       // vfncvt_ffw
+#endif
+};
+
+static bool is_vf_allowed_e16(uint32_t opcode) {
+  int len = sizeof(vf_allowed_e16) / sizeof(vf_allowed_e16[0]);
+  for (int i = 0; i < len; i++) {
+    if (vf_allowed_e16[i] == opcode) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static inline void update_vcsr() {
   vcsr->val = (vxrm->val) << 1 | vxsat->val;
 }
@@ -336,7 +360,6 @@ void vector_slide_check(Decode *s, bool is_over) {
 void arthimetic_instr(int opcode, int is_signed, int widening, int narrow, int dest_mask, Decode *s) {
   require_vector(true);
   int vlmax = get_vlmax(vtype->vsew, vtype->vlmul);
-  int idx;
   uint64_t carry;
   bool sat = false;
   bool overflow;
@@ -392,7 +415,7 @@ void arthimetic_instr(int opcode, int is_signed, int widening, int narrow, int d
   }
   check_vstart_exception(s);
   if(check_vstart_ignore(s)) return;
-  for(idx = vstart->val; idx < vl->val; idx ++) {
+  for(word_t idx = vstart->val; idx < vl->val; idx ++) {
     // mask
     rtlreg_t mask = get_mask(0, idx);
     carry = 0;
@@ -639,7 +662,7 @@ void arthimetic_instr(int opcode, int is_signed, int widening, int narrow, int d
         rtl_sext(s, s0, s0, 1 << vtype->vsew);
         rtl_sext(s, s1, s1, 1 << vtype->vsew);
         if(*s1 == 0) rtl_li(s, s1, ~0lu);
-        else if(*s0 == 0x8000000000000000LL && *s1 == -1) //may be error
+        else if(*s0 == 0x8000000000000000LL && *s1 == (word_t)-1) //may be error
           rtl_mv(s, s1, s0);
         else rtl_divs_q(s, s1, s0, s1);
         break;
@@ -651,7 +674,7 @@ void arthimetic_instr(int opcode, int is_signed, int widening, int narrow, int d
         rtl_sext(s, s0, s0, 1 << vtype->vsew);
         rtl_sext(s, s1, s1, 1 << vtype->vsew);
         if(*s1 == 0) rtl_mv(s, s1, s0);
-        else if(*s1 == 0x8000000000000000LL && *s1 == -1) //may be error
+        else if(*s1 == 0x8000000000000000LL && *s1 == (word_t)-1) //may be error
           rtl_li(s, s1, 0);
         else rtl_divs_r(s, s1, s0, s1);
         break;
@@ -742,7 +765,7 @@ void arthimetic_instr(int opcode, int is_signed, int widening, int narrow, int d
       case AADD : ROUNDING(+, *s1, *s0, *s1, is_signed); break;
       case ASUB : ROUNDING(-, *s1, *s0, *s1, is_signed); break;
       case SMUL :
-        overflow = *s1 == *s0 && *s1 == int_min;
+        overflow = *s1 == *s0 && *s1 == (word_t)int_min;
         i128_result = (int128_t)(int64_t)*s1 * (int128_t)(int64_t)*s0;
         INT_ROUNDING(i128_result, vxrm->val, sew - 1);
         i128_result = i128_result >> (sew - 1);
@@ -832,7 +855,7 @@ void arthimetic_instr(int opcode, int is_signed, int widening, int narrow, int d
   if (RVV_AGNOSTIC) {
     if(vtype->vta) {
       int vlmax = get_vlen_max(vtype->vsew, vtype->vlmul, widening);
-      for(idx = vl->val; idx < vlmax; idx++) {
+      for(int idx = vl->val; idx < vlmax; idx++) {
         if (dest_mask == 1)
           continue;
         *s1 = (uint64_t) -1;
@@ -840,7 +863,7 @@ void arthimetic_instr(int opcode, int is_signed, int widening, int narrow, int d
       }
     }
     if(dest_mask) {
-      for (idx = vl->val; idx < VLEN; idx++) {
+      for (int idx = vl->val; idx < VLEN; idx++) {
         set_mask(id_dest->reg, idx, 1, vtype->vsew, vtype->vlmul);
       }
     }
@@ -859,8 +882,7 @@ void permutaion_instr(int opcode, Decode *s) {
   check_vstart_exception(s);
   if(check_vstart_ignore(s)) return;
   int vlmax = get_vlmax(vtype->vsew, vtype->vlmul);
-  int idx;
-  for(idx = vstart->val; idx < vl->val; idx ++) {
+  for(word_t idx = vstart->val; idx < vl->val; idx ++) {
     // mask
     rtlreg_t mask = get_mask(0, idx);
     if(s->vm == 0) {
@@ -988,7 +1010,7 @@ void permutaion_instr(int opcode, Decode *s) {
   if (RVV_AGNOSTIC) {
     if(vtype->vta) {
       int vlmax = get_vlen_max(vtype->vsew, vtype->vlmul, 0);
-      for(idx = vl->val; idx < vlmax; idx++) {
+      for(int idx = vl->val; idx < vlmax; idx++) {
         *s1 = (uint64_t) -1;
         set_vreg(id_dest->reg, idx, *s1, vtype->vsew, vtype->vlmul, 1);
       }
@@ -1018,13 +1040,13 @@ void floating_arthimetic_instr(int opcode, int is_signed, int widening, int dest
     }
   } else if (widening == noCheck) {
     widening = noWidening;
-  } else if (widening == vdWidening || widening == vsdWidening || widening == vdWideningX2F) {
+  } else if (widening == vdWidening || widening == vsdWidening) {
     if (s->src_vmode == SRC_VV) {
       vector_wvv_check(s, true);
     } else {
       vector_wvv_check(s, false);
     }
-  } else if (widening == vdNarrow || widening == vdNarrowF2X) {
+  } else if (widening == vdNarrow) {
     if (s->src_vmode == SRC_VV) {
       vector_vwv_check(s, true);
     } else {
@@ -1037,25 +1059,28 @@ void floating_arthimetic_instr(int opcode, int is_signed, int widening, int dest
       vector_wwv_check(s, false);
     }
   }
-  int idx;
+
+  // check whether the fp16 instruction is supported
+  if (vtype->vsew == 1 && !is_vf_allowed_e16(opcode)) {
+    Loge("zvh extension not supported");
+    longjmp_exception(EX_II);
+  }
+
   word_t FPCALL_TYPE = FPCALL_W64;
   // fpcall type
   switch (vtype->vsew) {
     case 0 : Loge("f8 not supported"); longjmp_exception(EX_II); break;
     case 1 :
       switch (widening) {
-        case vdWideningX2F : FPCALL_TYPE = FPCALL_W16; break;
-        case vdNarrowF2X   : FPCALL_TYPE = FPCALL_W32; break;
-        default : Loge("ZVFH not supported"); longjmp_exception(EX_II); break;
+        case vdWidening  : FPCALL_TYPE = FPCALL_W16; break;
+        case vdNarrow    : FPCALL_TYPE = FPCALL_W32; break;
       }
       break;
     case 2 : 
       switch (widening) {
         case vsdWidening : FPCALL_TYPE = FPCALL_W32_to_64; break;
         case vsWidening  : FPCALL_TYPE = FPCALL_SRC2_W32_to_64; break;
-        case vdNarrowF2X :
         case vdNarrow    : FPCALL_TYPE = FPCALL_W64; break;
-        case vdWideningX2F :
         case vdWidening  :
         case noWidening  : FPCALL_TYPE = FPCALL_W32; break;
       }
@@ -1063,11 +1088,9 @@ void floating_arthimetic_instr(int opcode, int is_signed, int widening, int dest
     case 3 : FPCALL_TYPE = FPCALL_W64; break;
     default: Loge("other fp type not supported"); longjmp_exception(EX_II); break;
   }
-  if (widening == vdWideningX2F) widening = vdWidening;
-  else if (widening == vdNarrowF2X) widening = vdNarrow;
   check_vstart_exception(s);
   if(check_vstart_ignore(s)) return;
-  for(idx = vstart->val; idx < vl->val; idx ++) {
+  for(word_t idx = vstart->val; idx < vl->val; idx ++) {
     // mask
     rtlreg_t mask = get_mask(0, idx);
     if(s->vm == 0) {
@@ -1213,7 +1236,7 @@ void floating_arthimetic_instr(int opcode, int is_signed, int widening, int dest
         vlmax = get_vlen_max(vtype->vsew, vtype->vlmul, 1);
       else
         vlmax = get_vlen_max(vtype->vsew, vtype->vlmul, 0);
-      for(idx = vl->val; idx < vlmax; idx++) {
+      for(int idx = vl->val; idx < vlmax; idx++) {
         if (dest_mask == 1)
           continue;
         *s1 = (uint64_t) -1;
@@ -1224,7 +1247,7 @@ void floating_arthimetic_instr(int opcode, int is_signed, int widening, int dest
       }
     }
     if(dest_mask) {
-      for (idx = vl->val; idx < VLEN; idx++) {
+      for (int idx = vl->val; idx < VLEN; idx++) {
         set_mask(id_dest->reg, idx, 1, vtype->vsew, vtype->vlmul);
       }
     }
@@ -1243,8 +1266,7 @@ void mask_instr(int opcode, Decode *s) {
   }
   check_vstart_exception(s);
   if(check_vstart_ignore(s)) return;
-  int idx;
-  for(idx = vstart->val; idx < vl->val; idx++) {
+  for(word_t idx = vstart->val; idx < vl->val; idx++) {
     // operand - vs2
     *s0 = get_mask(id_src2->reg, idx); // unproper usage of s0
     *s0 &= 1; // only LSB
@@ -1279,7 +1301,7 @@ void mask_instr(int opcode, Decode *s) {
   vp_set_dirty();
 
   if (RVV_AGNOSTIC) {
-    for (idx = vl->val; idx < VLEN; idx++) {
+    for (int idx = vl->val; idx < VLEN; idx++) {
       set_mask(id_dest->reg, idx, 1, vtype->vsew, vtype->vlmul);
     }
   }
@@ -1301,8 +1323,7 @@ void reduction_instr(int opcode, int is_signed, int wide, Decode *s) {
   // operand - vs1
   get_vreg(id_src->reg, 0, s1, vtype->vsew+wide, vtype->vlmul, is_signed, 0);
   if(is_signed) rtl_sext(s, s1, s1, 1 << (vtype->vsew+wide));
-  int idx;
-  for(idx = vstart->val; idx < vl->val; idx ++) {
+  for(word_t idx = vstart->val; idx < vl->val; idx ++) {
     // get mask
     rtlreg_t mask = get_mask(0, idx);
     if(s->vm == 0 && mask==0) {
@@ -1345,7 +1366,6 @@ void float_reduction_instr(int opcode, int widening, Decode *s) {
   else
     get_vreg(id_src->reg, 0, s1, vtype->vsew, vtype->vlmul, 0, 0);
 
-  int idx;
   word_t FPCALL_TYPE = FPCALL_W64;
 
   // fpcall type
@@ -1365,7 +1385,7 @@ void float_reduction_instr(int opcode, int widening, Decode *s) {
   check_vstart_exception(s);
   if(check_vstart_ignore(s)) return;
 
-  for(idx = vstart->val; idx < vl->val; idx ++) {
+  for(word_t idx = vstart->val; idx < vl->val; idx ++) {
     rtlreg_t mask = get_mask(0, idx);
     if(s->vm == 0 && mask==0) {
       continue;
@@ -1475,7 +1495,6 @@ void float_reduction_step1(uint64_t src1, uint64_t src2, Decode *s) {
 void float_reduction_computing(Decode *s) {
   vector_reduction_check(s, false);
   word_t FPCALL_TYPE = FPCALL_W64;
-  int idx;
 
   // fpcall type
   switch (vtype->vsew) {
@@ -1491,7 +1510,7 @@ void float_reduction_computing(Decode *s) {
 
   // copy the vector register to the temp register
   init_tmp_vreg(s, vtype->vsew);
-  for(idx = vstart->val; idx < vl->val; idx ++) {
+  for(word_t idx = vstart->val; idx < vl->val; idx ++) {
     rtlreg_t mask = get_mask(0, idx);
     if(s->vm == 0 && mask==0) {
       continue;

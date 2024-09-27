@@ -70,9 +70,7 @@ enum fp_wop_t {
   vsdWidening,
   vsWidening,
   vdWidening,
-  vdWideningX2F,
   vdNarrow,
-  vdNarrowF2X,
   noCheck,
 };
 
@@ -88,7 +86,7 @@ void float_reduction_step1(uint64_t src1, uint64_t src2, Decode *s);
 void float_reduction_step2(uint64_t src, Decode *s);
 void float_reduction_computing(Decode *s);
 void isa_fp_rm_check(uint32_t rm);
-uint32_t isa_fp_get_frm();
+uint32_t isa_fp_get_frm(void);
 
 #define ARTHI(opcode, is_signed) arthimetic_instr(opcode, is_signed, 0, 0, 0, s);
 #define ARTHI_WIDE(opcode, is_signed) arthimetic_instr(opcode, is_signed, 1, 0, 0, s);
@@ -98,11 +96,9 @@ uint32_t isa_fp_get_frm();
 
 #define FLOAT_ARTHI(opcode, is_signed) floating_arthimetic_instr(opcode, is_signed, noWidening, 0, s);
 #define FLOAT_ARTHI_DWIDE(opcode, is_signed) floating_arthimetic_instr(opcode, is_signed, vdWidening, 0, s);
-#define FLOAT_ARTHI_DWIDE_X2F(opcode, is_signed) floating_arthimetic_instr(opcode, is_signed, vdWideningX2F, 0, s);
 #define FLOAT_ARTHI_SDWIDE(opcode) floating_arthimetic_instr(opcode, 0, vsdWidening, 0, s);
 #define FLOAT_ARTHI_SWIDE(opcode) floating_arthimetic_instr(opcode, 0, vsWidening, 0, s);
 #define FLOAT_ARTHI_DNARROW(opcode, is_signed) floating_arthimetic_instr(opcode, is_signed, vdNarrow, 0, s);
-#define FLOAT_ARTHI_DNARROW_F2X(opcode, is_signed) floating_arthimetic_instr(opcode, is_signed, vdNarrowF2X, 0, s);
 #define FLOAT_ARTHI_MASK(opcode) floating_arthimetic_instr(opcode, 0, noWidening, 1, s);
 #define FLOAT_ARTHI_NOCHECK(opcode) floating_arthimetic_instr(opcode, 0, noCheck, 0, s);
 
@@ -118,7 +114,7 @@ uint32_t isa_fp_get_frm();
 void require_vector(bool is_require_vtype);
 void require_float();
 void require_vm(Decode *s);
-double compute_vflmul();
+double compute_vflmul(void);
 void require_aligned(const unsigned val, const unsigned pos);
 void require_noover(const int astart, int asize, const int bstart, int bsize);
 void require_noover_widen(const int astart, int asize, const int bstart, int bsize);

@@ -311,10 +311,96 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define HIE_RMASK     HSI_MASK
 #define HIE_WMASK     HSI_MASK
 #define HIDELEG_MASK  (VSI_MASK | MUXDEF(CONFIG_RV_SHLCOFIDELEG, MIP_LCOFIP, 0))
-#define HEDELEG_MASK  0xb1ff
+#define HEDELEG_MASK  ((1 << EX_IAM) | \
+                       (1 << EX_IAF) | \
+                       (1 << EX_II ) | \
+                       (1 << EX_BP ) | \
+                       (1 << EX_LAM) | \
+                       (1 << EX_LAF) | \
+                       (1 << EX_SAM) | \
+                       (1 << EX_SAF) | \
+                       (1 << EX_ECU) | \
+                       (1 << EX_IPF) | \
+                       (1 << EX_LPF) | \
+                       (1 << EX_SPF) | \
+                       (1 << EX_SWC) | \
+                       (1 << EX_HWE))
 #endif
 
-#define MEDELEG_MASK MUXDEF(CONFIG_RVH, MUXDEF(CONFIG_RV_SDTRIG, 0xf0b7f7, 0xf0b7ff), MUXDEF(CONFIG_RV_SDTRIG, 0xb3f7, 0xb3ff))
+#define MEDELEG_RVH_SDTRIG ((1 << EX_IAM ) | \
+                            (1 << EX_IAF ) | \
+                            (1 << EX_II  ) | \
+                            (1 << EX_LAM ) | \
+                            (1 << EX_LAF ) | \
+                            (1 << EX_SAM ) | \
+                            (1 << EX_SAF ) | \
+                            (1 << EX_ECU ) | \
+                            (1 << EX_ECS ) | \
+                            (1 << EX_ECVS) | \
+                            (1 << EX_IPF ) | \
+                            (1 << EX_LPF ) | \
+                            (1 << EX_SPF ) | \
+                            (1 << EX_SWC ) | \
+                            (1 << EX_HWE ) | \
+                            (1 << EX_IGPF) | \
+                            (1 << EX_LGPF) | \
+                            (1 << EX_VI  ) | \
+                            (1 << EX_SGPF))
+
+#define MEDELEG_RVH_NONSDTRIG ( (1 << EX_IAM ) | \
+                                (1 << EX_IAF ) | \
+                                (1 << EX_II  ) | \
+                                (1 << EX_BP  ) | \
+                                (1 << EX_LAM ) | \
+                                (1 << EX_LAF ) | \
+                                (1 << EX_SAM ) | \
+                                (1 << EX_SAF ) | \
+                                (1 << EX_ECU ) | \
+                                (1 << EX_ECS ) | \
+                                (1 << EX_ECVS) | \
+                                (1 << EX_IPF ) | \
+                                (1 << EX_LPF ) | \
+                                (1 << EX_SPF ) | \
+                                (1 << EX_SWC ) | \
+                                (1 << EX_HWE ) | \
+                                (1 << EX_IGPF) | \
+                                (1 << EX_LGPF) | \
+                                (1 << EX_VI  ) | \
+                                (1 << EX_SGPF))
+
+#define MEDELEG_NONRVH_SDTRIG ((1 << EX_IAM) | \
+                               (1 << EX_IAF) | \
+                               (1 << EX_II ) | \
+                               (1 << EX_LAM) | \
+                               (1 << EX_LAF) | \
+                               (1 << EX_SAM) | \
+                               (1 << EX_SAF) | \
+                               (1 << EX_ECU) | \
+                               (1 << EX_ECS) | \
+                               (1 << EX_IPF) | \
+                               (1 << EX_LPF) | \
+                               (1 << EX_SPF) | \
+                               (1 << EX_SWC) | \
+                               (1 << EX_HWE))
+
+#define MEDELEG_NONRVH_NONSDTRIG ((1 << EX_IAM) | \
+                                  (1 << EX_IAF) | \
+                                  (1 << EX_II ) | \
+                                  (1 << EX_BP ) | \
+                                  (1 << EX_LAM) | \
+                                  (1 << EX_LAF) | \
+                                  (1 << EX_SAM) | \
+                                  (1 << EX_SAF) | \
+                                  (1 << EX_ECU) | \
+                                  (1 << EX_ECS) | \
+                                  (1 << EX_IPF) | \
+                                  (1 << EX_LPF) | \
+                                  (1 << EX_SPF) | \
+                                  (1 << EX_SWC) | \
+                                  (1 << EX_HWE))
+
+#define MEDELEG_MASK MUXDEF(CONFIG_RVH, MUXDEF(CONFIG_RV_SDTRIG, MEDELEG_RVH_SDTRIG, MEDELEG_RVH_NONSDTRIG), \
+                                        MUXDEF(CONFIG_RV_SDTRIG, MEDELEG_NONRVH_SDTRIG, MEDELEG_NONRVH_NONSDTRIG))
 
 #define MIDELEG_WMASK_BASE 0x222
 #define MIDELEG_WMASK MUXDEF(CONFIG_RV_SSCOFPMF, (MIDELEG_WMASK_BASE | 1 << IRQ_LCOFI), MIDELEG_WMASK_BASE)
@@ -433,7 +519,8 @@ static inline bool require_vs() {
 #endif // CONFIG_RVV
 
 inline word_t gen_status_sd(word_t status) {
-  mstatus_t xstatus = (mstatus_t)status;
+  mstatus_t xstatus;
+  xstatus.val = status;
   bool fs_dirty = xstatus.fs == EXT_CONTEXT_DIRTY;
   bool vs_dirty = xstatus.vs == EXT_CONTEXT_DIRTY;
   return ((word_t)(fs_dirty || vs_dirty)) << 63;
@@ -587,7 +674,8 @@ static inline void non_vmode_set_sie(word_t src) {
 }
 
 static inline void set_tvec(word_t* dest, word_t src) {
-  tvec_t newVal = (tvec_t)src;
+  tvec_t newVal;
+  newVal.val = src;
   tvec_t* destPtr = (tvec_t*)dest;
 #ifdef CONFIG_XTVEC_VECTORED_MODE
   if (newVal.mode < 2) {
@@ -1115,7 +1203,7 @@ static inline void csr_write(word_t *dest, word_t src) {
     else if (is_write(sie))     { vmode_set_sie(src); }
     else if (is_write(stvec))   { set_tvec((word_t*)vstvec, src); }
     else if (is_write(sscratch)){ vsscratch->val = src;}
-    else if (is_write(sepc))    { vsepc->val = src;}
+    else if (is_write(sepc))    { vsepc->val = src & (~0x1UL);}
     else if (is_write(scause))  { vscause->val = src;}
     else if (is_write(stval))   { vstval->val = src;}
     else if (is_write(sip))     { vmode_set_sip(src); }
@@ -1123,7 +1211,8 @@ static inline void csr_write(word_t *dest, word_t src) {
     else if (is_write(stimecmp)) { vstimecmp->val = src; }
 #endif
     else if (is_write(satp))    {
-      vsatp_t new_val = (vsatp_t)src;
+      vsatp_t new_val;
+      new_val.val = src;
       // legal mode
 #ifdef CONFIG_RV_SV48
       if (new_val.mode == SATP_MODE_BARE || new_val.mode == SATP_MODE_Sv39 || new_val.mode == SATP_MODE_Sv48) {
@@ -1186,13 +1275,14 @@ static inline void csr_write(word_t *dest, word_t src) {
   else if(is_write(vsscratch)){
     vsscratch->val = src;
   }else if(is_write(vsepc)){
-    vsepc->val = src;
+    vsepc->val = src & (~0x1UL);
   }else if(is_write(vscause)){
     vscause->val = src;
   }else if(is_write(vstval)){
     vstval->val = src;
   }else if(is_write(vsatp)){
-    vsatp_t new_val = (vsatp_t)src;
+    vsatp_t new_val;
+    new_val.val = src;
     // Update vsatp without checking if vsatp.mode is legal, when hart is not in MODE_VS.
     update_vsatp(new_val);
   }else if (is_write(mstatus)) {
@@ -1492,7 +1582,8 @@ static inline void csr_write(word_t *dest, word_t src) {
     if ( mstatus->tvm == 1 && !cpu.v && cpu.mode == MODE_S) {
       longjmp_exception(EX_II);
     }
-    hgatp_t new_val = (hgatp_t)src;
+    hgatp_t new_val;
+    new_val.val = src;
     // vmid and ppn WARL in the normal way, regardless of new_val.mode
     hgatp->vmid = new_val.vmid;
     // Make PPN[1:0] read only zero
@@ -2006,7 +2097,7 @@ static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
       } // When S-mode is implemented, then executing WFI in U-mode causes an illegal instruction exception
     break;
 #endif // CONFIG_MODE_USER
-    case -1: // fence.i
+    case (uint32_t)-1: // fence.i
       set_sys_state_flag(SYS_STATE_FLUSH_TCACHE);
       break;
     default:
